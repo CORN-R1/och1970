@@ -12,6 +12,6 @@ obj-$(CONFIG_SENSORS_OCH1970) += och1970.o
 #CROSS_COMPILE_PATH :=/home/powersys/lxx/HSC_8541E_ALL_F1/idh.code/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
 #PWD :=$(shell pwd)
 #all:
-# make ARCH=arm64 -C $(LINUX_KERNEL_PATH) M=$(PWD) CROSS_COMPILE=$(CROSS_COMPILE_PATH) modules
+#     make ARCH=arm64 -C $(LINUX_KERNEL_PATH) M=$(PWD) CROSS_COMPILE=$(CROSS_COMPILE_PATH) modules
 #clean:
-#  make ARCH=arm64 -C $(LINUX_KERNEL_PATH) M=$(PWD) clean
+#     make ARCH=arm64 -C $(LINUX_KERNEL_PATH) M=$(PWD) clean
