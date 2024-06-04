@@ -347,3 +347,147 @@ static ssize_t och1970_enable_show(struct device *dev,
     return sprintf(buf, "%d\n", t_och1970->enable);
 }
 
+static ssize_t och1970_enable_store(struct device *dev,
+        struct device_attribute *attr,
+        const char *buf, size_t count)
+{
+    unsigned int enable = simple_strtoul(buf, NULL, 10);
+
+    OCH_INFO("#######enable=%d\n", enable);
+    if (enable == 1){
+        device_init_wakeup(&t_och1970->client->dev, true);
+        och1970_en_swx1(true);
+    }else if(enable == 2){
+        schedule_delayed_work(&t_och1970->work, msecs_to_jiffies(t_och1970->delay));
+    }else if(enable == 3){
+        och1970_en_swx1(true);
+        schedule_delayed_work(&t_och1970->work, msecs_to_jiffies(t_och1970->delay));
+    }else{
+        device_init_wakeup(&t_och1970->client->dev, false);
+        //och1970_en_swy1(false);
+        och1970_en_swx1(false);
+        cancel_delayed_work_sync(&t_och1970->work);
+    }
+
+    return count;
+}
+
+static ssize_t och1970_wakeup_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+    return sprintf(buf, "%s\n", t_och1970->wakeup ? "true" : "false");
+}
+
+static ssize_t och1970_wakeup_store(struct device *dev,
+        struct device_attribute *attr,
+        const char *buf, size_t count)
+{
+    unsigned int wakeup = simple_strtoul(buf, NULL, 10);
+
+    OCH_INFO("#######wakeup=%d\n", wakeup);
+    if (wakeup == 1){
+        t_och1970->wakeup = true;
+    }else{
+        t_och1970->wakeup = false;
+    }
+    device_init_wakeup(&t_och1970->client->dev, t_och1970->wakeup);
+
+    return count;
+}
+
+static ssize_t show_chipinfo_value(struct device *dev,
+        struct device_attribute *attr, char *buf){
+
+        return sprintf(buf, "och1970");
+}
+
+static ssize_t och1970_thresholdx1_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+    uint8_t threshold[4];
+
+    och1970_i2c_read(OCH1970_REG_THRE_X1, 4, threshold);
+
+    return sprintf(buf, "BOP:%d\nBRP:%d\n", (((uint16_t)threshold[0]<<8) | (uint16_t)threshold[1]), (((uint16_t)threshold[2]<<8) | (uint16_t)threshold[3]));
+}
+
+static ssize_t och1970_thresholdx1_store(struct device *dev,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+    int i, j;
+    uint8_t threshold[4];
+    uint8_t bop_buf[100] = {0};
+    uint8_t brp_buf[100] = {0};
+    unsigned int bop_data = 0;
+    unsigned int brp_data = 0;
+
+    for(i = 0; i<100; i++){
+        if(buf[i] == '\n'){
+             memcpy(brp_buf, buf + j + 1, i-j);
+             brp_data = simple_strtoul(brp_buf, NULL, 10);
+             OCH_INFO("%s brp_data:%d\n", __func__, brp_data);
+             break;
+        }
+        if(buf[i] == ' '){
+            j = i;
+            memcpy(bop_buf, buf, i);
+            bop_data = simple_strtoul(bop_buf, NULL, 10);
+            OCH_INFO("%s bop_data:%d\n", __func__, bop_data);
+        }
+    }
+    if((0 < bop_data) && (bop_data < 0xffff) && (0 < brp_data) && (brp_data < 0xffff)){
+        threshold[0] = (uint8_t)((bop_data & 0xff00) >> 8);
+        threshold[1] = (uint8_t)(bop_data & 0xff);
+        threshold[2] = (uint8_t)((brp_data & 0xff00) >> 8);
+        threshold[3] = (uint8_t)(brp_data & 0xff);
+        och1970_set_threshold_x1(threshold);
+    }
+
+    return count;
+}
+
+static ssize_t och1970_thresholdy1_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+    uint8_t threshold[4];
+
+    och1970_i2c_read(OCH1970_REG_THRE_Y1, 4, threshold);
+
+    return sprintf(buf, "BOP:%d\nBRP:%d\n", (((uint16_t)threshold[0]<<8) | (uint16_t)threshold[1]), (((uint16_t)threshold[2]<<8) | (uint16_t)threshold[3]));
+}
+
+static ssize_t och1970_thresholdy1_store(struct device *dev,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+    int i, j;
+    uint8_t threshold[4];
+    uint8_t bop_buf[100] = {0};
+    uint8_t brp_buf[100] = {0};
+    unsigned int bop_data = 0;
+    unsigned int brp_data = 0;
+
+    for(i = 0; i<100; i++){
+        if(buf[i] == '\n'){
+            memcpy(brp_buf, buf + j + 1, i-j);
+            brp_data = simple_strtoul(brp_buf, NULL, 10);
+            OCH_INFO("%s brp_data:%d\n", __func__, brp_data);
+            break;
+        }
+        if(buf[i] == ' '){
+            j = i;
+            memcpy(bop_buf, buf, i);
+            bop_data = simple_strtoul(bop_buf, NULL, 10);
+            OCH_INFO("%s bop_data:%d\n", __func__, bop_data);
+        }
+    }
+    if((0 < bop_data) && (bop_data < 0xffff) && (0 < brp_data) && (brp_data < 0xffff)){
+        threshold[0] = (uint8_t)((bop_data & 0xff00) >> 8);
+        threshold[1] = (uint8_t)(bop_data & 0xff);
+        threshold[2] = (uint8_t)((brp_data & 0xff00) >> 8);
+        threshold[3] = (uint8_t)(brp_data & 0xff);
+        och1970_set_threshold_y1(threshold);
+    }
+
+    return count;
+}
+
