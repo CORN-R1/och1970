@@ -89,4 +89,5 @@ struct och1970_data {
      int irq_number;
 };
 
+
 #endif /* _OCH1970_H_ */
