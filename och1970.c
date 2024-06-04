@@ -491,3 +491,135 @@ static ssize_t och1970_thresholdy1_store(struct device *dev,
     return count;
 }
 
+static ssize_t och1970_thresholdz1_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+    uint8_t threshold[4];
+
+    och1970_i2c_read(OCH1970_REG_THRE_Z1, 4, threshold);
+
+    return sprintf(buf, "BOP:%d\nBRP:%d\n", (((uint16_t)threshold[0]<<8) | (uint16_t)threshold[1]), (((uint16_t)threshold[2]<<8) | (uint16_t)threshold[3]));
+}
+
+static ssize_t och1970_thresholdz1_store(struct device *dev,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+    int i, j;
+    uint8_t threshold[4];
+    uint8_t bop_buf[100] = {0};
+    uint8_t brp_buf[100] = {0};
+    unsigned int bop_data = 0;
+    unsigned int brp_data = 0;
+
+     for(i = 0; i<100; i++){
+         if(buf[i] == '\n'){
+              memcpy(brp_buf, buf + j + 1, i-j);
+              brp_data = simple_strtoul(brp_buf, NULL, 10);
+              OCH_INFO("%s brp_data:%d\n", __func__, brp_data);
+              break;
+         }
+         if(buf[i] == ' '){
+              j = i;
+              memcpy(bop_buf, buf, i);
+              bop_data = simple_strtoul(bop_buf, NULL, 10);
+              OCH_INFO("%s bop_data:%d\n", __func__, bop_data);
+         }
+     }
+     if((0 < bop_data) && (bop_data < 0xffff) && (0 < brp_data) && (brp_data < 0xffff)){
+         threshold[0] = (uint8_t)((bop_data & 0xff00) >> 8);
+         threshold[1] = (uint8_t)(bop_data & 0xff);
+         threshold[2] = (uint8_t)((brp_data & 0xff00) >> 8);
+         threshold[3] = (uint8_t)(brp_data & 0xff);
+         och1970_set_threshold_z1(threshold);
+     }
+
+     return count;
+}
+
+static DEVICE_ATTR(enable,         0644, och1970_enable_show, och1970_enable_store);
+static DEVICE_ATTR(wakeup,         0644, och1970_wakeup_show, och1970_wakeup_store);
+static DEVICE_ATTR(chipinfo,       0644, show_chipinfo_value, NULL);
+static DEVICE_ATTR(thresholdx1, 0644, och1970_thresholdx1_show, och1970_thresholdx1_store);
+static DEVICE_ATTR(thresholdy1, 0644, och1970_thresholdy1_show, och1970_thresholdy1_store);
+static DEVICE_ATTR(thresholdz1, 0644, och1970_thresholdz1_show, och1970_thresholdz1_store);
+
+static struct attribute *och1970_attributes[] = {
+     &dev_attr_enable.attr,
+     &dev_attr_wakeup.attr,
+     &dev_attr_chipinfo.attr,
+     &dev_attr_thresholdx1.attr,
+     &dev_attr_thresholdy1.attr,
+     &dev_attr_thresholdz1.attr,
+     NULL
+};
+
+static struct attribute_group och1970_attribute_grout = {
+     .attrs = och1970_attributes
+};
+
+
+#ifdef CONFIG_OF
+static int och1970_parse_dt(struct och1970_data *och1970)
+{
+     struct device_node *np = och1970->client->dev.of_node;
+     int ret;
+
+     och1970->irq_gpio = of_get_named_gpio(np, "irq-gpio", 0);
+     if(gpio_is_valid(och1970->irq_gpio)){
+         ret = gpio_request(och1970->irq_gpio, "och1970-irq");
+         gpio_direction_input(och1970->irq_gpio);
+     }else{
+         OCH_ERR("%s: irq-gpio not find !!!\n", __func__);
+         return -1;
+     }
+
+     och1970->rst_gpio = of_get_named_gpio(np, "rst-gpio", 0);
+     if(gpio_is_valid(och1970->rst_gpio)){
+         ret = gpio_request(och1970->rst_gpio, "och1970-rst");
+         gpio_direction_output(och1970->rst_gpio, 0);
+     }else{
+         OCH_ERR("%s: rst-gpio not find !!!\n", __func__);
+         gpio_free(och1970->irq_gpio);
+         return -1;
+     }
+
+     return 0;
+}
+#endif
+
+static int och1970_input_init(struct och1970_data *och1970)
+{
+     struct input_dev *dev = NULL;
+     int err = 0;
+
+    OCH_INFO("%s start\n", __func__);
+    dev = input_allocate_device();
+    if (!dev) {
+         OCH_ERR("%s: can't allocate device!\n", __func__);
+         return -ENOMEM;
+    }
+
+    dev->name = OCH1970_INPUT_NAME;
+    dev->id.bustype = BUS_I2C;
+    dev->evbit[0] = BIT_MASK(EV_REL);
+    dev->relbit[0] = BIT_MASK(REL_X) | BIT_MASK(REL_Y) | BIT_MASK(REL_Z) | BIT_MASK(REL_MISC);
+    __set_bit(KEY_F2, dev->keybit);
+    __set_bit(KEY_F3, dev->keybit);
+    __set_bit(KEY_F7, dev->keybit);
+    __set_bit(KEY_F8, dev->keybit);
+    set_bit(EV_KEY, dev->evbit);
+
+    input_set_drvdata(dev, och1970);
+
+    err = input_register_device(dev);
+    if (err < 0) {
+         OCH_ERR("%s: can't register device!\n", __func__);
+         input_free_device(dev);
+         return err;
+    }
+    och1970->input = dev;
+
+    OCH_INFO("%s successful\n", __func__);
+    return 0;
+}
+
