@@ -739,3 +739,71 @@ static int och1970_i2c_remove(struct i2c_client *client)
     return 0;
 }
 
+static int och1970_resume(struct device *dev)
+{
+    struct och1970_data *och1970 = i2c_get_clientdata(to_i2c_client(dev));
+
+    if (device_may_wakeup(&och1970->client->dev)) {
+         OCH_INFO("%s: %d\n", __FUNCTION__, __LINE__);
+         enable_irq_wake(och1970->irq_number);
+    }
+    return 0;
+}
+
+static int och1970_suspend(struct device *dev)
+{
+    struct och1970_data *och1970 = i2c_get_clientdata(to_i2c_client(dev));
+
+    if (device_may_wakeup(&och1970->client->dev)) {
+         OCH_INFO("%s: %d\n", __FUNCTION__, __LINE__);
+         enable_irq_wake(och1970->irq_number);
+     }
+     return 0;
+}
+
+static SIMPLE_DEV_PM_OPS(och1970_pm_ops, och1970_suspend, och1970_resume);
+
+static const struct i2c_device_id och1970_id[] = {
+     {OCH1970_I2C_NAME, 0},
+     { }
+};
+MODULE_DEVICE_TABLE(i2c, och1970_id);
+
+static const struct of_device_id och1970_acc_of_match[] = {
+          { .compatible = "magnetic,och1970", },
+          { }
+};
+MODULE_DEVICE_TABLE(of, och1970_acc_of_match);
+
+static struct i2c_driver och1970_driver = {
+     .driver = {
+           .name = OCH1970_I2C_NAME,
+           .owner = THIS_MODULE,
+           .of_match_table = och1970_acc_of_match,
+           .pm = &och1970_pm_ops,
+     },
+     .probe      = och1970_i2c_probe,
+     .remove     = och1970_i2c_remove,
+     .id_table = och1970_id,
+};
+
+static int __init och1970_i2c_init(void)
+{
+     OCH_INFO("%s magnetic driver: init\n", OCH1970_I2C_NAME);
+
+     return i2c_add_driver(&och1970_driver);
+}
+
+static void __exit och1970_i2c_exit(void)
+{
+     OCH_INFO("%s magnetic driver exit\n", OCH1970_I2C_NAME);
+
+     i2c_del_driver(&och1970_driver);
+}
+
+module_init(och1970_i2c_init);
+module_exit(och1970_i2c_exit);
+
+MODULE_DESCRIPTION("och1970 magnetic driver");
+MODULE_AUTHOR("HSC LXX");
+MODULE_LICENSE("GPL");
