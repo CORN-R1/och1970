@@ -1,0 +1,12 @@
+#
+# Makefile for och1970 sensors driver.
+#
+config SENSORS_OCH1970
+         tristate "OCH1970 accelerometer sensor device with I2C bus"
+         depends on I2C
+         default n
+         help
+             Say Y here if you have a OCH1970 device on the board and use I2C
+             communication, else say N.
+
+             To compile this driver as a module, choose M here.
