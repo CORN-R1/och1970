@@ -623,3 +623,119 @@ static int och1970_input_init(struct och1970_data *och1970)
     return 0;
 }
 
+static void och1970_input_deinit(struct och1970_data *och1970)
+{
+    struct input_dev *dev = och1970->input;
+
+    OCH_INFO("%s \n", __func__);
+    input_unregister_device(dev);
+    //input_free_device(dev);
+}
+
+static int och1970_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
+{
+    int err = 0;
+    uint8_t threshold_x1[] = {0x11, 0x94, 0x11, 0x94};
+    uint8_t threshold_y1[] = {0x02, 0x58, 0x02, 0x58};
+    uint8_t threshold_z1[] = {0x05, 0x46, 0x05, 0x46};
+    struct och1970_data *och1970 = NULL;
+
+    OCH_INFO("%s start\n", __func__);
+
+    /* check i2c function */
+    if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
+         OCH_ERR("%s: i2c function not support!\n", __func__);
+         err = -ENODEV;
+         goto exit;
+    }
+    /* setup private data */
+    och1970 = kzalloc(sizeof(struct och1970_data), GFP_KERNEL);
+    if (!och1970) {
+         OCH_ERR("%s: can't allocate memory for och1970_data!\n", __func__);
+         err = -ENOMEM;
+         goto exit;
+    }
+    t_och1970 = och1970;
+    och1970->wakeup = true;
+    och1970->client = client;
+
+    i2c_set_clientdata(client, och1970);
+
+#ifdef CONFIG_OF
+    if(och1970->client->dev.of_node){
+         if(och1970_parse_dt(och1970))
+             goto exit;
+    }
+#endif
+
+    mutex_init(&och1970->irq_mutex);
+
+    if(check_chip_id(och1970)){
+         OCH_ERR("%s: check chip id failed\n", __func__);
+         goto exit1;
+    }
+
+    och1970_init();
+
+    err = och1970_input_init(och1970);
+    if (err < 0) {
+         OCH_ERR("input init fail!\n");
+         goto exit1;
+    }
+
+    och1970->delay = 100;
+    wake_lock_init(&och1970->time_lock, WAKE_LOCK_SUSPEND, "och1970-time");
+    device_init_wakeup(&och1970->client->dev, och1970->wakeup);
+    INIT_DELAYED_WORK(&och1970->work, och1970_work_func);
+    INIT_WORK(&och1970->irq_work, och1970_irq_work_fun);
+    och1970_set_threshold_x1(threshold_x1);
+    och1970_set_threshold_y1(threshold_y1);
+    och1970_set_threshold_z1(threshold_z1);
+    och1970_en_swx1(false);
+    och1970_en_swy1(true);
+    och1970_en_swz1(false);
+    och1970_odinten(true);
+    och1970_en_drdy(false);
+    if(gpio_is_valid(och1970->irq_gpio)){
+         och1970->irq_number = gpio_to_irq(och1970->irq_gpio);
+         err = request_irq(och1970->irq_number, och1970_handle_fun, IRQF_TRIGGER_LOW | IRQF_ONESHOT, "och1970-irq", NULL);
+    }
+
+    err = sysfs_create_group(&och1970->input->dev.kobj, &och1970_attribute_grout);
+    if(err < 0){
+         OCH_ERR("%s:input create group fail!\n", __func__);
+         goto exit2;
+    }
+
+    OCH_INFO("%s successful\n", __func__);
+    return 0;
+
+exit2:
+    free_irq(och1970->irq_number, NULL);
+    och1970_input_deinit(och1970);
+    cancel_work_sync(&och1970->irq_work);
+exit1:
+    mutex_destroy(&och1970->irq_mutex);
+    gpio_free(och1970->irq_gpio);
+    gpio_free(och1970->rst_gpio);
+    kfree(och1970);
+exit:
+    return err;
+}
+
+static int och1970_i2c_remove(struct i2c_client *client)
+{
+    struct och1970_data *och1970 = i2c_get_clientdata(client);
+
+    sysfs_remove_group(&och1970->input->dev.kobj, &och1970_attribute_grout);
+    free_irq(och1970->irq_number, NULL);
+    cancel_work_sync(&och1970->irq_work);
+    och1970_input_deinit(och1970);
+    mutex_destroy(&och1970->irq_mutex);
+    gpio_free(och1970->irq_gpio);
+    gpio_free(och1970->rst_gpio);
+    kfree(och1970);
+
+    return 0;
+}
+
