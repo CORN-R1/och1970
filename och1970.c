@@ -106,3 +106,134 @@ void och1970_init(void)
     data_temp = (now_value & ~bit5) | bit5;
     och1970_i2c_write(OCH1970_REG_CNTL2, 1, &data_temp);
 }
+
+static uint8_t och1970_check_drdy(void)
+{
+    uint8_t drdy_flag[2];
+
+    och1970_i2c_read(OCH1970_REG_STATUS1, 2, drdy_flag);
+
+    return ((drdy_flag[1] & bit0) == bit0);
+}
+
+static void och1970_set_threshold_x1(uint8_t *value)
+{
+    t_och1970->bop_x1 = (uint16_t)(((value[0] << 8) & 0xff00) | (value[1] & 0xff));
+    t_och1970->brp_x1 = (uint16_t)(((value[2] << 8) & 0xff00) | (value[3] & 0xff));
+    och1970_i2c_write(OCH1970_REG_THRE_X1, 4, value);
+}
+
+static void och1970_set_threshold_y1(uint8_t *value)
+{
+    t_och1970->bop_y1 = (uint16_t)(((value[0] << 8) & 0xff00) | (value[1] & 0xff));
+    t_och1970->brp_y1 = (uint16_t)(((value[2] << 8) & 0xff00) | (value[3] & 0xff));
+    och1970_i2c_write(OCH1970_REG_THRE_Y1, 4, value);
+}
+
+static void och1970_set_threshold_z1(uint8_t *value)
+{
+    t_och1970->bop_z1 = (uint16_t)(((value[0] << 8) & 0xff00) | (value[1] & 0xff));
+    t_och1970->brp_z1 = (uint16_t)(((value[2] << 8) & 0xff00) | (value[3] & 0xff));
+    och1970_i2c_write(OCH1970_REG_THRE_Z1, 4, value);
+}
+
+static void och1970_en_drdy(bool flage)
+{
+    uint8_t now_value[2];
+
+    och1970_i2c_read(OCH1970_REG_CNTL1, 2, now_value);
+    if(flage)
+       now_value[1] = (now_value[1] & ~bit0) | bit0;
+    else
+       now_value[1] = now_value[1] & ~bit0;
+
+    och1970_i2c_write(OCH1970_REG_CNTL1, 2, now_value);
+}
+
+static void och1970_en_swx1(bool flage)
+{
+    uint8_t now_value[2];
+
+    och1970_i2c_read(OCH1970_REG_CNTL1, 2, now_value);
+    if(flage)
+       now_value[1] = (now_value[1] & ~bit1) | bit1;
+    else
+       now_value[1] = now_value[1] & ~bit1;
+
+    och1970_i2c_write(OCH1970_REG_CNTL1, 2, now_value);
+}
+
+static void och1970_en_swy1(bool flage)
+{
+    uint8_t now_value[2];
+
+    och1970_i2c_read(OCH1970_REG_CNTL1, 2, now_value);
+    if(flage)
+       now_value[1] = (now_value[1] & ~bit3) | bit3;
+    else
+       now_value[1] = now_value[1] & ~bit3;
+
+    och1970_i2c_write(OCH1970_REG_CNTL1, 2, now_value);
+}
+
+static void och1970_en_swz1(bool flage)
+{
+    uint8_t now_value[2];
+
+    och1970_i2c_read(OCH1970_REG_CNTL1, 2, now_value);
+    if(flage)
+       now_value[1] = (now_value[1] & ~bit5) | bit5;
+    else
+       now_value[1] = now_value[1] & ~bit5;
+
+    och1970_i2c_write(OCH1970_REG_CNTL1, 2, now_value);
+}
+
+static void och1970_odinten(bool flage)
+{
+    uint8_t now_value[2];
+
+    och1970_i2c_read(OCH1970_REG_CNTL1, 2, now_value);
+    if(flage)
+       now_value[0] = (now_value[0] & ~bit2) | bit2;
+    else
+       now_value[0] = now_value[0] & ~bit2;
+
+    och1970_i2c_write(OCH1970_REG_CNTL1, 2, now_value);
+}
+
+static void och1970_get_x_data(void)
+{
+    uint8_t och1970_x_data_array[4] = {0};
+
+    och1970_i2c_read(OCH1970_REG_DATAX, 4, och1970_x_data_array);
+    t_och1970->x_data = (int16_t)(((uint16_t)och1970_x_data_array[2]<<8) | (uint16_t)och1970_x_data_array[3]);
+
+}
+
+static void och1970_get_y_data(void)
+{
+    uint8_t och1970_y_data_array[4] = {0};
+
+    och1970_i2c_read(OCH1970_REG_DATAY, 4, och1970_y_data_array);
+    t_och1970->y_data = (int16_t)(((uint16_t)och1970_y_data_array[2]<<8) | (uint16_t)och1970_y_data_array[3]);
+
+}
+
+static void och1970_get_z_data(void)
+{
+    uint8_t och1970_z_data_array[4] = {0};
+
+    och1970_i2c_read(OCH1970_REG_DATAZ, 4, och1970_z_data_array);
+    t_och1970->z_data = (int16_t)(((uint16_t)och1970_z_data_array[2]<<8) | (uint16_t)och1970_z_data_array[3]);
+}
+
+static void och1970_get_xy_data(void)
+{
+    uint8_t och1970_xy_data_array[6] = {0};
+
+    och1970_i2c_read(OCH1970_REG_DATAX_Y, 6, och1970_xy_data_array);
+    t_och1970->x_data = (int16_t)(((uint16_t)och1970_xy_data_array[4]<<8) | (uint16_t)och1970_xy_data_array[5]);
+    t_och1970->y_data = (int16_t)(((uint16_t)och1970_xy_data_array[2]<<8) | (uint16_t)och1970_xy_data_array[3]);
+
+}
