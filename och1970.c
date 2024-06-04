@@ -237,3 +237,113 @@ static void och1970_get_xy_data(void)
     t_och1970->y_data = (int16_t)(((uint16_t)och1970_xy_data_array[2]<<8) | (uint16_t)och1970_xy_data_array[3]);
 
 }
+
+static void och1970_get_xz_data(void)
+{
+    uint8_t och1970_xz_data_array[6] = {0};
+
+    och1970_i2c_read(OCH1970_REG_DATAX_Z, 6, och1970_xz_data_array);
+    t_och1970->x_data = (int16_t)(((uint16_t)och1970_xz_data_array[4]<<8) | (uint16_t)och1970_xz_data_array[5]);
+    t_och1970->z_data = (int16_t)(((uint16_t)och1970_xz_data_array[2]<<8) | (uint16_t)och1970_xz_data_array[3]);
+
+}
+
+static void och1970_get_yz_data(void)
+{
+    uint8_t och1970_yz_data_array[6] = {0};
+
+    och1970_i2c_read(OCH1970_REG_DATAY_Z, 6, och1970_yz_data_array);
+    t_och1970->y_data = (int16_t)(((uint16_t)och1970_yz_data_array[4]<<8) | (uint16_t)och1970_yz_data_array[5]);
+    t_och1970->z_data = (int16_t)(((uint16_t)och1970_yz_data_array[2]<<8) | (uint16_t)och1970_yz_data_array[3]);
+
+}
+
+static void och1970_get_xyz_data(void)
+{
+    uint8_t och1970_xyz_data_array[8] = {0};
+
+    och1970_i2c_read(OCH1970_REG_DATAX_Y_Z, 8, och1970_xyz_data_array);
+    t_och1970->x_data = (int16_t)(((uint16_t)och1970_xyz_data_array[6]<<8) | (uint16_t)och1970_xyz_data_array[7]);
+    t_och1970->y_data = (int16_t)(((uint16_t)och1970_xyz_data_array[4]<<8) | (uint16_t)och1970_xyz_data_array[5]);
+    t_och1970->z_data = (int16_t)(((uint16_t)och1970_xyz_data_array[2]<<8) | (uint16_t)och1970_xyz_data_array[3]);
+
+}
+
+static void och1970_work_func(struct work_struct *work)
+{
+    struct och1970_data *och1970 = container_of((struct delayed_work *)work, struct och1970_data, work);
+
+    if(och1970_check_drdy()==1){      //data is ready
+        och1970_get_xyz_data();
+        input_report_rel(och1970->input, REL_X, och1970->x_data);
+        input_report_rel(och1970->input, REL_Y, och1970->y_data);
+        input_report_rel(och1970->input, REL_Z, och1970->z_data);
+        input_sync(och1970->input);
+        OCH_INFO("%s start    ###############\n", __func__);
+        OCH_INFO("Xdata: %d \n", och1970->x_data);
+        OCH_INFO("Ydata: %d \n", och1970->y_data);
+        OCH_INFO("Zdata: %d \n", och1970->z_data);
+        OCH_INFO("%s end     #################\n", __func__);
+    }
+
+    schedule_delayed_work(&och1970->work, msecs_to_jiffies(och1970->delay));
+}
+
+static void och1970_irq_work_fun(struct work_struct *work)
+{
+    mutex_lock(&t_och1970->irq_mutex);
+
+    och1970_get_xyz_data();
+    if (device_may_wakeup(&t_och1970->client->dev)) {
+        pm_relax(&t_och1970->client->dev);
+    }
+    OCH_INFO("%s start     @@@@@@@@@@@@@@@@@@@\n", __func__);
+    OCH_INFO("Xdata: %d \n", t_och1970->x_data);
+    OCH_INFO("Ydata: %d \n", t_och1970->y_data);
+    OCH_INFO("Zdata: %d \n", t_och1970->z_data);
+    OCH_INFO("%s end     @@@@@@@@@@@@@@@@@@@@\n", __func__);
+    if((t_och1970->x_data < t_och1970->brp_x1) && (t_och1970->y_data < t_och1970->brp_y1)){
+        if(t_och1970->z_data < 0){
+            input_report_key(t_och1970->input, KEY_F2, 1);
+            input_report_key(t_och1970->input, KEY_F2, 0);
+        }else {
+            input_report_key(t_och1970->input, KEY_F3, 1);
+            input_report_key(t_och1970->input, KEY_F3, 0);
+        }
+    }else if((t_och1970->x_data < t_och1970->brp_x1) && (t_och1970->y_data > t_och1970->brp_y1 * 3)){//°Î³ö ·§ÖµËæthreshold±ä»¯
+        //och1970_en_swy1(true);
+        input_report_key(t_och1970->input, KEY_F8, 1);
+        input_report_key(t_och1970->input, KEY_F8, 0);
+    }else if (t_och1970->x_data > t_och1970->bop_x1){
+        //och1970_en_swy1(false);
+        input_report_key(t_och1970->input, KEY_F7, 1);
+        input_report_key(t_och1970->input, KEY_F7, 0);
+    }
+
+    input_sync(t_och1970->input);
+    msleep(100);
+    enable_irq(t_och1970->irq_number);
+
+    mutex_unlock(&t_och1970->irq_mutex);
+
+}
+
+static irqreturn_t och1970_handle_fun(int irq, void *desc)
+{
+    disable_irq_nosync(irq);
+    wake_lock_timeout(&t_och1970->time_lock,5*HZ);
+    if (device_may_wakeup(&t_och1970->client->dev)) {
+        pm_stay_awake(&t_och1970->client->dev);
+    }
+
+    schedule_work(&t_och1970->irq_work);
+
+    return IRQ_HANDLED;
+}
+
+static ssize_t och1970_enable_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+    return sprintf(buf, "%d\n", t_och1970->enable);
+}
+
